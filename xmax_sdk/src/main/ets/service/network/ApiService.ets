@@ -162,6 +162,7 @@ export class ApiService implements ApiServicing {
             header: this.headers(),
             extraData,
             expectDataType: http.HttpDataType.STRING,
+            usingCache: false,
             connectTimeout: API_TIMEOUT_MS,
             readTimeout: API_TIMEOUT_MS
           }

@@ -10,6 +10,7 @@
 
 export { XmaxLoggerOption } from './src/main/ets/foundation/logging/XmaxLoggerOption';
 export { XmaxConfiguration } from './src/main/ets/core/XmaxConfiguration';
+export { XmaxCreditBalance } from './src/main/ets/core/account/XmaxCreditBalance';
 export { XmaxEnvironment } from './src/main/ets/core/XmaxEnvironment';
 export {
   XmaxError,

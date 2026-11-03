@@ -20,6 +20,7 @@ import { ApiService } from '../service/network/ApiService';
 import { ApiServicing } from '../service/network/ApiServicing';
 import { XmaxConfiguration } from './XmaxConfiguration';
 import { apiBaseURL, XmaxEnvironment } from './XmaxEnvironment';
+import { XmaxCreditBalance } from './account/XmaxCreditBalance';
 import { RealtimeConfiguration } from './realtime/RealtimeConfiguration';
 import { RealtimeModel, RealtimeModels } from '../service/realtime/RealtimeModel';
 import { XmaxRealtimeManaging } from './realtime/XmaxRealtimeManaging';
@@ -27,7 +28,14 @@ import { XmaxRealtimeManager } from './realtime/XmaxRealtimeManager';
 import { XmaxStorageManaging } from './storage/XmaxStorageManaging';
 import { XmaxStorageManager } from './storage/XmaxStorageManager';
 
-/** A client that provides access to Xmax realtime generation, storage, and media services. */
+/** The server payload decoded separately from the validated public account model. */
+interface CreditBalanceResponse {
+
+  /** Remaining credits, validated before returning them to your app. */
+  currentBalance?: number;
+}
+
+/** A client for account queries, realtime generation, storage, and media services. */
 export class XmaxClient {
 
   /** The client configuration. */
@@ -61,6 +69,32 @@ export class XmaxClient {
       configuration.apiKey,
       apiBaseURL(configuration.environment)
     );
+  }
+
+  /**
+   * Fetches remaining credits for the account owning this client's API key.
+   *
+   * Each call reads the current server balance using the configured general API environment.
+   * Fractional credits are preserved. This query does not require a platform context or create a
+   * realtime session. The promise rejects with an XmaxError if credentials, transport, or the
+   * response are invalid.
+   *
+   * @returns The account's remaining credits.
+   */
+  async getCreditBalance(): Promise<XmaxCreditBalance> {
+    this.configuration.validate();
+
+    const response: CreditBalanceResponse | null =
+      await this.apiService.get<CreditBalanceResponse | null>('/balance');
+    const value: number | undefined = response?.currentBalance;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      throw new XmaxError(
+        XmaxErrorCode.API_ERROR,
+        'Credit balance must be a finite, nonnegative number'
+      );
+    }
+
+    return new XmaxCreditBalance(value);
   }
 
   /**

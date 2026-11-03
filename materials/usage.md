@@ -7,6 +7,7 @@ refer to files supplied by your app. Run realtime operations from a lifecycle-aw
 component and handle rejected promises.
 
 - [Configure permissions](#configure-permissions)
+- [Query remaining credits](#query-remaining-credits)
 - [Create an input stream](#create-an-input-stream)
 - [External video input](#external-video-input)
 - [Model capabilities](#model-capabilities)
@@ -80,6 +81,23 @@ permission is unavailable, the SDK reports an `XmaxError`.
 
 Before deploying to a device, configure application signing in DevEco Studio under
 **File > Project Structure > Signing Configs**.
+
+<br>
+
+## Query remaining credits
+
+Query the remaining credits for the account owning your client's API key:
+
+```ts
+const balance = await client.getCreditBalance();
+console.info(`Remaining credits: ${balance.currentBalance}`);
+```
+
+Each call fetches the current server balance using the client's configured
+`XmaxEnvironment`. Fractional credits are preserved. No realtime manager, session,
+or platform context is required; declare `ohos.permission.INTERNET` in your app.
+Handle rejected promises as `XmaxError` for invalid credentials, network failures,
+or invalid server responses. A failed query is not reported as a zero balance.
 
 <br>
 
