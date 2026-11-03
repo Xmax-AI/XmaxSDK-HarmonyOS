@@ -228,9 +228,6 @@ Install the dependencies:
 ohpm install
 ```
 
-See [Configure permissions](./materials/usage.md#configure-permissions) before creating
-a local media stream.
-
 <br>
 
 ## Quick Start

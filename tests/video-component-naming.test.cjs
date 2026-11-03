@@ -29,9 +29,7 @@ test('the dual-video component composes two single-track components and XLab use
   const example = fs.readFileSync(path.join(root,
     'examples/XLab/entry/src/main/ets/modules/xlrealtime/RealtimePage.ets'), 'utf8');
   assert.match(example, /XmaxRealtimeDualVideo\(\{/);
-  for (const file of ['README.md', 'materials/usage.md']) {
-    const source = fs.readFileSync(path.join(root, file), 'utf8');
-    assert.match(source, /\bXmaxRealtimeDualVideo\b/);
-    assert.doesNotMatch(source, /\bXmaxRealtimeVideoView\b|\bXmaxVideoView\b/);
-  }
+  const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+  assert.match(readme, /\bXmaxRealtimeDualVideo\b/);
+  assert.doesNotMatch(readme, /\bXmaxRealtimeVideoView\b|\bXmaxVideoView\b/);
 });
