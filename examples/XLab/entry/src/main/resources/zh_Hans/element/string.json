@@ -1,5 +1,8 @@
 {
   "string": [
+    { "name": "credits", "value": "积分" },
+    { "name": "credits_unavailable", "value": "暂不可用" },
+    { "name": "credits_refresh_failed", "value": "积分刷新失败" },
     { "name": "camera_format", "value": "比例" },
     { "name": "external_capture", "value": "外部采集" },
     { "name": "external_capture_description", "value": "App 自行解码视频和音频，支持 HDR Vivid，通过 Source + Sink 接入生成" },

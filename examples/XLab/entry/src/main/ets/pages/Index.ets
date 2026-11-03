@@ -7,6 +7,12 @@ import { common } from '@kit.AbilityKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { systemShare } from '@kit.ShareKit';
 import { RealtimeModel, XMAX_SDK_VERSION } from '@xmax/sdk';
+import { XLabApplicationLifecycle } from '../application/XLabApplicationLifecycle';
+import {
+  FeedCreditBalancePoller,
+  FeedCreditBalanceState,
+  formatFeedCreditBalance
+} from '../modules/xlfeed/FeedCreditBalance';
 import { XLabConfiguration } from '../modules/xlrealtime/config/XLabConfiguration';
 import {
   XLabModelOption,
@@ -74,17 +80,83 @@ struct RuntimeMetric {
 }
 
 @Component
-struct ModelRegistryCard {
+struct CreditBalancePill {
   @StorageLink(XLabLocalization.REVISION_KEY) private languageRevision: number = 0;
+  @Prop state: FeedCreditBalanceState = new FeedCreditBalanceState();
+
+  private text(key: string): string {
+    return XLabLocalization.text(key, this.languageRevision);
+  }
+
+  private balanceValue(): string {
+    return this.state.balance === undefined && this.state.refreshFailed ?
+      this.text('credits_unavailable') : formatFeedCreditBalance(this.state.balance);
+  }
+
+  build() {
+    Row({ space: 6 }) {
+      Text(this.text('credits'))
+        .fontSize(10 * FEED_FONT_SCALE)
+        .fontColor('#9BA8B9')
+
+      if (this.state.isLoading && this.state.balance === undefined) {
+        LoadingProgress()
+          .width(10)
+          .height(10)
+          .color('#8EF0C8')
+      } else {
+        Text(this.balanceValue())
+          .fontSize(11 * FEED_FONT_SCALE)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.state.refreshFailed ? '#F2A04F' : '#8EF0C8')
+          .maxLines(1)
+          .constraintSize({ maxWidth: 160 })
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+    }
+    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+    .backgroundColor('#128EF0C8')
+    .border({ width: 1, color: '#248EF0C8' })
+    .borderRadius(50)
+    .accessibilityGroup(true)
+    .accessibilityText(`${this.text('credits')}: ${
+      this.state.isLoading && this.state.balance === undefined ? this.text('loading') : this.balanceValue()}`)
+    .accessibilityDescription(this.state.refreshFailed ? this.text('credits_refresh_failed') : '')
+  }
+}
+
+@Component
+struct ModelRegistryCard {
+  @StorageLink(XLabLocalization.REVISION_KEY) @Watch('refreshCreditBalance')
+  private languageRevision: number = 0;
 
   private text(key: string): string {
     return XLabLocalization.text(key, this.languageRevision);
   }
 
   @Prop selectedModel: string = RealtimeModel.X2_0;
-  @Prop apiKey: string = '';
+  @Prop @Watch('refreshCreditBalance') apiKey: string = '';
+  @Prop @Watch('refreshCreditBalance') isActive: boolean = false;
+  @State private creditBalance: FeedCreditBalanceState = new FeedCreditBalanceState();
+  private readonly creditPoller: FeedCreditBalancePoller = new FeedCreditBalancePoller();
   onSelect: (model: RealtimeModel) => void = (_model: RealtimeModel): void => {};
   onApiKeyChange: (apiKey: string) => void = (_apiKey: string): void => {};
+
+  aboutToAppear(): void {
+    this.creditPoller.onChange = (state: FeedCreditBalanceState): void => {
+      this.creditBalance = state;
+    };
+    this.refreshCreditBalance();
+  }
+
+  aboutToDisappear(): void {
+    this.creditPoller.onChange = null;
+    this.creditPoller.pause();
+  }
+
+  private refreshCreditBalance(): void {
+    this.creditPoller.update(this.apiKey, XLabLocalization.environment, this.isActive);
+  }
 
   private async openApiKeyApplicationPage(): Promise<void> {
     try {
@@ -120,6 +192,10 @@ struct ModelRegistryCard {
             .fontWeight(FontWeight.Bold)
             .fontColor('#7E8A9A')
             .letterSpacing(0.9)
+
+          Blank()
+
+          CreditBalancePill({ state: this.creditBalance })
         }
         .width('100%')
 
@@ -566,6 +642,17 @@ struct SdkFeatureCard {
 struct Index {
   @StorageLink(XLabLocalization.REVISION_KEY) private languageRevision: number = 0;
   @StorageLink(XLabLocalization.LANGUAGE_KEY) private selectedLanguage: string = XLabLanguage.SYSTEM;
+  @StorageLink(XLabApplicationLifecycle.FOREGROUND_STORAGE_KEY)
+  private isApplicationForeground: boolean = true;
+  @State private isPageVisible: boolean = false;
+
+  onPageShow(): void {
+    this.isPageVisible = true;
+  }
+
+  onPageHide(): void {
+    this.isPageVisible = false;
+  }
 
   private text(key: string): string {
     return XLabLocalization.text(key, this.languageRevision);
@@ -878,6 +965,7 @@ struct Index {
           ModelRegistryCard({
             selectedModel: this.selectedRealtimeModel,
             apiKey: this.realtimeApiKey,
+            isActive: this.isPageVisible && this.isApplicationForeground,
             onSelect: (model: RealtimeModel): void => {
               this.selectRealtimeModel(model);
             },

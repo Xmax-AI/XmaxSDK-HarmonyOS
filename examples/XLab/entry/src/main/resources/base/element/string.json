@@ -1,5 +1,8 @@
 {
   "string": [
+    { "name": "credits", "value": "Credits" },
+    { "name": "credits_unavailable", "value": "Unavailable" },
+    { "name": "credits_refresh_failed", "value": "Could not refresh credits." },
     { "name": "camera_format", "value": "Ratio" },
     { "name": "external_capture", "value": "External Capture" },
     { "name": "external_capture_description", "value": "Decode SDR/HDR Vivid video and PCM in the app through Source + Sink" },
