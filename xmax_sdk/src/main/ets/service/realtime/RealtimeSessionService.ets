@@ -68,22 +68,25 @@ export class RealtimeSessionService implements RealtimeSessionServicing {
   }
 
   /**
-   * Starts periodic heartbeats for a session.
+   * Sends an immediate first heartbeat and schedules subsequent requests after each response.
    *
    * @param sessionId The realtime generation session identifier.
    * @param onFailure The heartbeat failure handler.
+   * @param firstHeartbeatGraceSeconds The startup allowance sent only in the first request.
    */
   startHeartbeat(
     sessionId: string,
-    onFailure: RealtimeSessionHeartbeatFailureHandler
+    onFailure: RealtimeSessionHeartbeatFailureHandler,
+    firstHeartbeatGraceSeconds?: number
   ): void {
     this.stopHeartbeat();
 
     const heartbeatVersion: number = this.heartbeatVersion;
-    this.scheduleHeartbeat(
+    void this.sendHeartbeat(
       sessionId,
       onFailure,
-      heartbeatVersion
+      heartbeatVersion,
+      firstHeartbeatGraceSeconds
     );
   }
 
@@ -127,35 +130,67 @@ export class RealtimeSessionService implements RealtimeSessionServicing {
     heartbeatVersion: number
   ): void {
     this.heartbeatTimer = setTimeout(
-      async () => {
-        this.heartbeatTimer = -1;
-
-        try {
-          const session: RealtimeSession = await this.heartbeatSession(sessionId);
-          this.ensureSessionActive(session);
-        } catch (error) {
-          if (heartbeatVersion !== this.heartbeatVersion) {
-            return;
-          }
-
-          this.stopHeartbeat();
-          await onFailure(
-            sessionId,
-            XmaxError.from(error)
-          );
-
+      (): void => {
+        if (heartbeatVersion !== this.heartbeatVersion) {
           return;
         }
 
-        if (heartbeatVersion === this.heartbeatVersion) {
-          this.scheduleHeartbeat(
-            sessionId,
-            onFailure,
-            heartbeatVersion
-          );
-        }
+        this.heartbeatTimer = -1;
+        void this.sendHeartbeat(
+          sessionId,
+          onFailure,
+          heartbeatVersion
+        );
       },
       SESSION_HEARTBEAT_INTERVAL_MS
+    );
+  }
+
+  /**
+   * Sends one current heartbeat, scheduling the next request only while its cycle remains active.
+   *
+   * @param sessionId The realtime generation session identifier.
+   * @param onFailure The heartbeat failure handler.
+   * @param heartbeatVersion The heartbeat cycle revision.
+   * @param firstHeartbeatGraceSeconds The startup allowance sent only in the first request.
+   */
+  private async sendHeartbeat(
+    sessionId: string,
+    onFailure: RealtimeSessionHeartbeatFailureHandler,
+    heartbeatVersion: number,
+    firstHeartbeatGraceSeconds?: number
+  ): Promise<void> {
+    if (heartbeatVersion !== this.heartbeatVersion) {
+      return;
+    }
+
+    try {
+      const session: RealtimeSession = await this.heartbeatSession(
+        sessionId,
+        firstHeartbeatGraceSeconds
+      );
+      if (heartbeatVersion !== this.heartbeatVersion) {
+        return;
+      }
+
+      this.ensureSessionActive(session);
+    } catch (error) {
+      if (heartbeatVersion !== this.heartbeatVersion) {
+        return;
+      }
+
+      this.stopHeartbeat();
+      await onFailure(
+        sessionId,
+        XmaxError.from(error)
+      );
+      return;
+    }
+
+    this.scheduleHeartbeat(
+      sessionId,
+      onFailure,
+      heartbeatVersion
     );
   }
 
@@ -163,14 +198,19 @@ export class RealtimeSessionService implements RealtimeSessionServicing {
    * Sends a heartbeat and parses current session information.
    *
    * @param sessionId The realtime generation session identifier.
+   * @param firstHeartbeatGraceSeconds The startup allowance, omitted after the first request.
    *
    * @returns The session returned by the heartbeat.
    */
   private async heartbeatSession(
-    sessionId: string
+    sessionId: string,
+    firstHeartbeatGraceSeconds?: number
   ): Promise<RealtimeSession> {
+    const body: Record<string, number> | undefined = firstHeartbeatGraceSeconds === undefined ?
+      undefined : { 'firstHeartbeatGraceSeconds': firstHeartbeatGraceSeconds };
     const value = await this.apiService.put<Object>(
-      `/session/${sessionId}/heartbeat`
+      `/session/${sessionId}/heartbeat`,
+      body
     );
 
     return this.toSession(

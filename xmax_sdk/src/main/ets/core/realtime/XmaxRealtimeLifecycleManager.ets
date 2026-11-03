@@ -321,6 +321,9 @@ export class XmaxRealtimeLifecycleManager {
   /** The current lifecycle state handler. */
   private stateListener: RealtimeStateListener | null = null;
 
+  /** The internal handler run after state commitment and before the public listener. */
+  private readonly onStateChanged: RealtimeStateListener | null;
+
   // Exclusive operation and termination task
 
   /** The operation currently holding exclusive execution ownership. */
@@ -329,15 +332,24 @@ export class XmaxRealtimeLifecycleManager {
   /** The shared resource termination task, if active. */
   private termination: RealtimeTermination | null = null;
 
-  /** Creates a realtime lifecycle manager. */
+  /**
+   * Creates a realtime lifecycle manager.
+   *
+   * @param errorManager The shared error normalizer.
+   * @param cleanup The function releasing resources within a termination scope.
+   * @param hasLocalMedia The local media availability check used after cleanup.
+   * @param onStateChanged The internal state commitment handler, called before the public listener.
+   */
   constructor(
     errorManager: XmaxRealtimeErrorManager,
     cleanup: CleanupHandler,
-    hasLocalMedia: () => boolean = (): boolean => false
+    hasLocalMedia: () => boolean = (): boolean => false,
+    onStateChanged: RealtimeStateListener | null = null
   ) {
     this.errorManager = errorManager;
     this.cleanup = cleanup;
     this.hasLocalMedia = hasLocalMedia;
+    this.onStateChanged = onStateChanged;
   }
 
   /** The most recently committed realtime state. */
@@ -794,6 +806,7 @@ export class XmaxRealtimeLifecycleManager {
     }
 
     this.state = next;
+    this.onStateChanged?.(next);
     this.notifyStateListener(next);
   }
 

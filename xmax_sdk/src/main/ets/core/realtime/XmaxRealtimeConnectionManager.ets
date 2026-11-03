@@ -8,6 +8,7 @@
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
 
+import systemDateTime from '@ohos.systemDateTime';
 import { ImageSize } from '../../service/media/ImageSize';
 import { TrajectoryRegistry } from '../../rendering/trajectory/TrajectoryRegistry';
 import { RealtimeTiming } from '../../service/realtime/RealtimeTiming';
@@ -81,6 +82,15 @@ export class XmaxRealtimeConnectionManager {
 
   /** The established server session, if connected. */
   private activeSession: RealtimeSession | null = null;
+
+  /** The monotonic connection start time in nanoseconds, absent outside an active connection. */
+  private connectionStartedAt?: number;
+
+  /** Whether HTTP heartbeats have started for the current server session. */
+  private heartbeatStarted: boolean = false;
+
+  /** The failure handler retained until the session first enters generating. */
+  private heartbeatFailureHandler: ConnectionHeartbeatFailureHandler | null = null;
 
   // Result stream target dimensions
 
@@ -191,7 +201,7 @@ export class XmaxRealtimeConnectionManager {
    * close the server session.
    */
   prepareForClose(): void {
-    this.sessionService.stopHeartbeat();
+    this.stopHeartbeat();
     try {
       this.renderController.resetRemoteTrack(this.activeRemoteTrack);
     } catch (error) {
@@ -228,6 +238,10 @@ export class XmaxRealtimeConnectionManager {
     let sessionActivated: boolean = false;
 
     try {
+      this.stopHeartbeat();
+      this.connectionStartedAt = systemDateTime.getUptime(systemDateTime.TimeType.ACTIVE, true);
+      this.heartbeatFailureHandler = onHeartbeatFailure;
+
       this.timing.beginSessionCreation();
       session = await this.sessionService.createSession(model);
       this.timing.finishSessionCreation();
@@ -249,11 +263,6 @@ export class XmaxRealtimeConnectionManager {
         }
       );
       this.ensureCurrent(isCurrent);
-
-      this.sessionService.startHeartbeat(
-        session.id,
-        onHeartbeatFailure
-      );
 
       const resolvedMediaFormat: RealtimeVideoFormat = this.mediaController.currentVideoFormat ?? videoFormat;
       const remoteTrack = new RealtimeVideoTrack(
@@ -313,6 +322,36 @@ export class XmaxRealtimeConnectionManager {
   }
 
   /**
+   * Starts HTTP heartbeats once after generating is committed for the current session.
+   *
+   * @param sessionId The server session entering generation.
+   */
+  startHeartbeat(
+    sessionId: string
+  ): void {
+    const onFailure: ConnectionHeartbeatFailureHandler | null = this.heartbeatFailureHandler;
+    if (this.activeSession?.id !== sessionId || this.heartbeatStarted ||
+      this.connectionStartedAt === undefined || onFailure === null) {
+      return;
+    }
+
+    const elapsed: number = systemDateTime.getUptime(systemDateTime.TimeType.ACTIVE, true) -
+      this.connectionStartedAt;
+    const graceSeconds: number = Math.max(0, Math.ceil(elapsed / 1000000000));
+    this.heartbeatStarted = true;
+
+    this.sessionService.startHeartbeat(
+      sessionId,
+      async (id: string, error: XmaxError): Promise<void> => {
+        if (this.heartbeatStarted && this.activeSession?.id === id) {
+          await onFailure(id, error);
+        }
+      },
+      graceSeconds
+    );
+  }
+
+  /**
    * Stops heartbeats, releases remote resources, leaves the room, and closes the session.
    *
    * @param fallbackSessionId The session identifier used if current session resources are missing.
@@ -329,7 +368,7 @@ export class XmaxRealtimeConnectionManager {
     this.activeSession = null;
     this.activeRemoteTrack = null;
 
-    this.sessionService.stopHeartbeat();
+    this.stopHeartbeat();
     try {
       this.renderController.resetRemoteTrack(remoteTrack);
     } catch (error) {
@@ -375,7 +414,7 @@ export class XmaxRealtimeConnectionManager {
     const remoteTrack: RealtimeVideoTrack | null = this.activeRemoteTrack;
     this.activeRemoteTrack = null;
 
-    this.sessionService.stopHeartbeat();
+    this.stopHeartbeat();
     this.renderController.resetRemoteTrack(remoteTrack);
 
     try {
@@ -403,6 +442,14 @@ export class XmaxRealtimeConnectionManager {
         'Realtime connection was cancelled'
       );
     }
+  }
+
+  /** Stops HTTP heartbeats and clears the session's startup timing and failure handler. */
+  private stopHeartbeat(): void {
+    this.heartbeatStarted = false;
+    this.connectionStartedAt = undefined;
+    this.heartbeatFailureHandler = null;
+    this.sessionService.stopHeartbeat();
   }
 
 }

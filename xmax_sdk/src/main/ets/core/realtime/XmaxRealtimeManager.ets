@@ -223,7 +223,12 @@ export class XmaxRealtimeManager implements XmaxRealtimeManaging {
           scope,
           taskId
         ),
-      (): boolean => this.mediaController.currentTrack !== null
+      (): boolean => this.mediaController.currentTrack !== null,
+      (state: RealtimeState): void => {
+        if (state.connectionState === RealtimeConnectionState.GENERATING && state.sessionId !== undefined) {
+          this.connectionManager.startHeartbeat(state.sessionId);
+        }
+      }
     );
   }
 

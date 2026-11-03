@@ -38,14 +38,17 @@ export interface RealtimeSessionServicing {
   ): Promise<RealtimeSession>;
 
   /**
-   * Starts heartbeats for a realtime session.
+   * Sends an immediate first heartbeat, then repeats every ten seconds after each response.
    *
    * @param sessionId The realtime session identifier.
    * @param onFailure The heartbeat failure callback.
+   * @param firstHeartbeatGraceSeconds The nonnegative startup allowance in whole seconds, sent
+   * only in the first request; omitted when undefined.
    */
   startHeartbeat(
     sessionId: string,
-    onFailure: RealtimeSessionHeartbeatFailureHandler
+    onFailure: RealtimeSessionHeartbeatFailureHandler,
+    firstHeartbeatGraceSeconds?: number
   ): void;
 
   /** Stops heartbeats for the current realtime session. */

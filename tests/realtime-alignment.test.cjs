@@ -29,7 +29,8 @@ function deferred() {
 }
 
 function managerFixture(modelName = 'x2.0-sla') {
-  const calls = { sessions: [], closed: [], starts: [], updates: [], stops: [], audio: [], switches: 0 };
+  const calls = { sessions: [], closed: [], starts: [], updates: [], stops: [], audio: [], switches: 0,
+    heartbeats: [] };
   const timers = [];
   let sessionGate = null, autoConfirm = true, holdPreview = false, media, stream, api;
   let Track, Format, MediaStream, XmaxError, Code, CameraPosition, updatePosition;
@@ -137,7 +138,10 @@ function managerFixture(modelName = 'x2.0-sla') {
       return { id: `session-${calls.sessions.length}`, connection: { roomId: 'room', botName: 'bot' } };
     }
     async closeSession(id) { calls.closed.push(id); }
-    startHeartbeat(id, onFailure) { this.heartbeat = error => onFailure(id, error); }
+    startHeartbeat(id, onFailure, graceSeconds) {
+      calls.heartbeats.push({ id, graceSeconds });
+      this.heartbeat = error => onFailure(id, error);
+    }
     stopHeartbeat() {}
   }
   const load = loadEts({ ...platform,
@@ -647,11 +651,11 @@ test('disconnect is a no-op after generation failure has closed the session and 
   assert.deepEqual(f.calls.audio, disconnectedAudio);
 });
 
-test('heartbeat failure cancels startup, closes the session and only then publishes the original error in state.reason', async () => {
+test('heartbeat failure cancels a later task restart and publishes the original error only after cleanup', async () => {
   const f = managerFixture(), local = await f.create(), received = [];
-  await f.manager.connect(local);
+  await f.manager.startGeneration(local, new f.Context('first'));
   f.holdGeneration();
-  const running = outcome(f.manager.startGeneration(new f.Context('test')));
+  const running = outcome(f.manager.startGeneration({ context: new f.Context('test'), restart: true }));
   f.manager.setStateListener(state => { if (state.reason?.error) received.push({ error: state.reason.error,
     state: f.manager.currentState.connectionState,
     closed: [...f.calls.closed], task: f.stream.currentGenerationTaskId
@@ -661,6 +665,47 @@ test('heartbeat failure cancels startup, closes the session and only then publis
   assert.equal((await running).error, failure);
   assert.deepEqual(received, [{ error: failure, state: f.State.READY, closed: ['session-1'], task: '' }]);
   assert.notEqual(f.media.currentTrack, null);
+});
+
+test('HTTP heartbeats start after the first committed GENERATING, not connect or pending confirmation', async () => {
+  const f = managerFixture(), local = await f.create(), observedHeartbeatCounts = [];
+  await f.manager.connect(local);
+  assert.deepEqual(f.calls.heartbeats, []);
+  f.holdGeneration();
+  const starting = f.manager.startGeneration(new f.Context('first'));
+  await settle();
+  assert.deepEqual(f.calls.heartbeats, []);
+  assert.equal(f.manager.currentState.connectionState, f.State.CONNECTED);
+
+  f.manager.setStateListener(state => {
+    if (state.connectionState === f.State.GENERATING) {
+      observedHeartbeatCounts.push(f.calls.heartbeats.length);
+    }
+  });
+  f.calls.starts.at(-1).gate.resolve();
+  await starting;
+  assert.deepEqual(f.calls.heartbeats, [{ id: 'session-1', graceSeconds: 0 }]);
+
+  await f.manager.startGeneration(new f.Context('updated'));
+  const restarting = f.manager.startGeneration({ restart: true });
+  await settle();
+  f.calls.starts.at(-1).gate.resolve();
+  await restarting;
+  assert.equal(f.calls.heartbeats.length, 1);
+  assert.deepEqual(observedHeartbeatCounts, [1, 1]);
+  await f.manager.close();
+});
+
+test('cancelling generation before GENERATING never starts HTTP heartbeats', async () => {
+  for (const operation of ['disconnect', 'close']) {
+    const f = managerFixture(), local = await f.create();
+    f.holdGeneration();
+    const starting = outcome(f.manager.startGeneration(local, new f.Context('test')));
+    await settle();
+    await f.manager[operation]();
+    assert.equal((await starting).error.code, f.Code.CANCELLED);
+    assert.deepEqual(f.calls.heartbeats, []);
+  }
 });
 
 test('stop-signal failure is logged without a failure callback and still disconnects and preserves local preview', async () => {

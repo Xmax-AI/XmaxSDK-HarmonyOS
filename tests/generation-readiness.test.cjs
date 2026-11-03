@@ -96,7 +96,10 @@ function fixture(t, timingOptions = {}) {
         return { id: 'session', connection: {
         roomId: 'room', userId: 'user', token: 'test', botName: 'bot'
       } }; }
-      startHeartbeat() {} stopHeartbeat() {} async closeSession() {}
+      startHeartbeat(id, _onFailure, graceSeconds) {
+        events.push(`heartbeat:${id}:${graceSeconds}`);
+      }
+      stopHeartbeat() {} async closeSession() {}
     } }
   }, {
     setTimeout: (callback, ms) => { timers.set(++timerId, { callback, ms }); return timerId; },
@@ -239,6 +242,7 @@ test('GENERATING and one-call return wait for a usable frame without requiring a
   let returned = false; pending.then(() => { returned = true; });
   assert.equal(f.manager.currentState.connectionState, f.State.CONNECTED);
   assert.equal(f.events.includes('audio:bot:true'), false);
+  assert.equal(f.events.some(event => event.startsWith('heartbeat:')), false);
   assert.equal(returned, false);
   assert.deepEqual([...f.timers.values()].map(timer => timer.ms), [10000]);
   f.frame(new f.RemoteStream('room', 'other'));
@@ -250,6 +254,8 @@ test('GENERATING and one-call return wait for a usable frame without requiring a
   assert.ok(result.value.videoTrack);
   assert.equal(f.manager.currentState.connectionState, f.State.GENERATING);
   assert.equal(f.manager.currentState.taskId, task);
+  assert.deepEqual(f.events.filter(event => event.startsWith('heartbeat:')), ['heartbeat:session:0']);
+  assert.ok(f.events.indexOf('heartbeat:session:0') < f.events.indexOf(`state:${f.State.GENERATING}`));
   assert.ok(f.events.indexOf('audio:bot:true') < f.events.indexOf(`state:${f.State.GENERATING}`));
   assert.equal(f.events.includes('bind-surface'), false);
   assert.equal(f.observations.at(-1).enabled, false);
@@ -304,6 +310,7 @@ test('stop after the frame callback but before its continuation cannot activate 
   assert.equal((await pending).error.code, f.Code.CANCELLED);
   assert.equal(f.events.includes('audio:bot:true'), false);
   assert.equal(f.events.includes(`state:${f.State.GENERATING}`), false);
+  assert.equal(f.events.some(event => event.startsWith('heartbeat:')), false);
 });
 
 test('disconnect and close cancel pending first-frame waits without a late state transition', async t => {
