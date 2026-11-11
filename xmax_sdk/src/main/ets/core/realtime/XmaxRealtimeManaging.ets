@@ -23,6 +23,7 @@ import {
   RealtimeStateListener
 } from '../../service/realtime/RealtimeState';
 import { RealtimeVideoFormat } from '../../service/realtime/RealtimeVideoFormat';
+import { RealtimeCameraZoom } from '../../service/realtime/RealtimeCameraZoom';
 import {
   LocalVideoPlaybackState,
   LocalVideoPlaybackStateListener
@@ -42,6 +43,13 @@ export interface XmaxRealtimeManaging {
 
   /** The camera's local output format, or undefined without a camera stream. Uplink quality does not affect it. */
   readonly currentCameraVideoFormat: RealtimeVideoFormat | undefined;
+
+  /**
+   * The active camera's zoom, or undefined when adjustable zoom is unavailable.
+   *
+   * Read again after switching cameras. A newly submitted ratio may take a few frames to appear.
+   */
+  readonly currentCameraZoom: RealtimeCameraZoom | undefined;
 
   /** The applied uplink level, or undefined before connection completes or after cleanup begins. */
   readonly uplinkQualityLevel: RealtimeQualityLevel | undefined;
@@ -232,6 +240,21 @@ export interface XmaxRealtimeManaging {
   updateCameraFormat(
     videoFormat: RealtimeVideoFormat
   ): Promise<void>;
+
+  /**
+   * Submits a zoom change to the active camera without replacing the local stream or generation task.
+   *
+   * Available in READY, CONNECTED, and GENERATING when no other realtime operation is active.
+   * The change affects both local preview and uplink; the camera may apply it on a later frame.
+   *
+   * @param ratio A finite multiplier within the current camera's supported range. CameraKit uses
+   * up to two decimal places of precision.
+   *
+   * @throws XmaxError If zoom is unavailable, the ratio is out of range, or the camera rejects it.
+   */
+  setCameraZoomRatio(
+    ratio: number
+  ): void;
 
   /**
    * Stops the local camera stream and releases local preview resources.

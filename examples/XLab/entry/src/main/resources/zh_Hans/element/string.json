@@ -1,5 +1,7 @@
 {
   "string": [
+    { "name": "camera_zoom", "value": "变焦" },
+    { "name": "camera_zoom_widest", "value": "最广" },
     { "name": "credits", "value": "积分" },
     { "name": "credits_unavailable", "value": "暂不可用" },
     { "name": "credits_refresh_failed", "value": "积分刷新失败" },

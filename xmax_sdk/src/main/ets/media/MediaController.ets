@@ -23,6 +23,7 @@ import { CameraPreviewReadyHandler } from './camera/CameraPreviewReadyHandler';
 import { RealtimeMediaStream } from '../service/realtime/RealtimeMediaStream';
 import { RealtimePoint } from '../service/realtime/RealtimePoint';
 import { RealtimeVideoFormat } from '../service/realtime/RealtimeVideoFormat';
+import { RealtimeCameraZoom } from '../service/realtime/RealtimeCameraZoom';
 import { RealtimeVideoTrack } from '../service/realtime/RealtimeVideoTrack';
 import { LocalVideoPlaybackState } from '../service/realtime/LocalVideoPlaybackState';
 import { StreamControlling } from '../stream/StreamControlling';
@@ -313,6 +314,29 @@ export class MediaController implements MediaControlling {
     if (this.activeSource?.controller === this.cameraController) {
       this.cameraController.updateOrientation();
     }
+  }
+
+  /** Reads zoom from the active camera source rather than a cached lens configuration. */
+  get currentCameraZoom(): RealtimeCameraZoom | undefined {
+    const source: ActiveLocalMediaSource | null = this.activeSource;
+    return source !== null && source.controller === this.cameraController && !source.closing ?
+      this.cameraController.currentZoom : undefined;
+  }
+
+  /** Changes zoom on the owned camera source. */
+  setCameraZoomRatio(
+    ratio: number
+  ): void {
+    const source: ActiveLocalMediaSource | null = this.activeSource;
+    if (source === null || source.controller !== this.cameraController || source.closing ||
+      source.operationPromise !== null || source.stopPromise !== null) {
+      throw new XmaxError(
+        XmaxErrorCode.INVALID_CONFIGURATION,
+        'Camera zoom requires an active camera without a conflicting media operation'
+      );
+    }
+
+    this.cameraController.setZoomRatio(ratio);
   }
 
   /**

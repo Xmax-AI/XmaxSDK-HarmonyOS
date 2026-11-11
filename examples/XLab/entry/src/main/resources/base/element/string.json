@@ -1,5 +1,7 @@
 {
   "string": [
+    { "name": "camera_zoom", "value": "Zoom" },
+    { "name": "camera_zoom_widest", "value": "Widest" },
     { "name": "credits", "value": "Credits" },
     { "name": "credits_unavailable", "value": "Unavailable" },
     { "name": "credits_refresh_failed", "value": "Could not refresh credits." },

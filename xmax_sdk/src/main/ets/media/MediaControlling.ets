@@ -13,6 +13,7 @@ import { CameraPosition } from '../foundation/media/camera/CameraPosition';
 import { CameraPreviewReadyHandler } from './camera/CameraPreviewReadyHandler';
 import { RealtimeMediaStream } from '../service/realtime/RealtimeMediaStream';
 import { RealtimeVideoFormat } from '../service/realtime/RealtimeVideoFormat';
+import { RealtimeCameraZoom } from '../service/realtime/RealtimeCameraZoom';
 import { RealtimeVideoTrack } from '../service/realtime/RealtimeVideoTrack';
 import { LocalVideoPlaybackState } from '../service/realtime/LocalVideoPlaybackState';
 import { InteractionControlling } from './interaction/InteractionControlling';
@@ -29,6 +30,9 @@ export interface MediaControlling extends InteractionControlling {
 
   /** @returns The local video format, or null without an active track. */
   readonly currentVideoFormat: RealtimeVideoFormat | undefined;
+
+  /** The active camera's zoom, or undefined when adjustable zoom is unavailable. */
+  readonly currentCameraZoom: RealtimeCameraZoom | undefined;
 
   /**
    * Images and videos use contain padding in the canvas; cameras require fixed supported
@@ -94,6 +98,11 @@ export interface MediaControlling extends InteractionControlling {
   updateCameraFormat(
     videoFormat: RealtimeVideoFormat
   ): Promise<void>;
+
+  /** Submits a zoom multiplier within the active camera's supported range. */
+  setCameraZoomRatio(
+    ratio: number
+  ): void;
 
   /** Starts the current camera microphone on connection, if enabled. */
   startMicrophoneCapture(): void;

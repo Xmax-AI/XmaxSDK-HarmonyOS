@@ -24,6 +24,7 @@ import { RealtimeStatisticsPanel, RealtimeStatisticsButton } from './mvvm/view/R
 import { RealtimeAudioControlsView } from './mvvm/view/RealtimeAudioControlsView';
 import { RealtimeRecordingButton } from './mvvm/view/RealtimeRecordingButton';
 import { RealtimeCameraFormatButton } from './mvvm/view/RealtimeCameraFormatButton';
+import { RealtimeCameraZoomButton } from './mvvm/view/RealtimeCameraZoomButton';
 import { RealtimePromptInputView } from './mvvm/view/RealtimePromptInputView';
 import { RealtimeReferenceListView } from './mvvm/view/RealtimeReferenceListView';
 import { RealtimeViewModel } from './mvvm/viewmodel/RealtimeViewModel';
@@ -494,6 +495,14 @@ export struct RealtimePage {
           .onClick((): void => {
             void this.switchCamera();
           })
+          if (this.state.cameraZoom !== undefined) {
+            RealtimeCameraZoomButton({
+              state: this.state,
+              isCameraSwitching: this.isCameraSwitchTransitionActive,
+              onSelect: (ratio: number): void => this.viewModel.setCameraZoomRatio(ratio)
+            })
+              .position({ right: 66, top: 18 })
+          }
           RealtimeAudioControlsView({
             state: this.state,
             isCamera: true,

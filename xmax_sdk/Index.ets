@@ -52,6 +52,7 @@ export {
   RealtimeVideoEncoderPreference
 } from './src/main/ets/service/realtime/RealtimeVideoFormat';
 export { RealtimeQualityLevel } from './src/main/ets/stream/quality/RealtimeQualityLevel';
+export { RealtimeCameraZoom } from './src/main/ets/service/realtime/RealtimeCameraZoom';
 export {
   RealtimeVideoTrack
 } from './src/main/ets/service/realtime/RealtimeVideoTrack';

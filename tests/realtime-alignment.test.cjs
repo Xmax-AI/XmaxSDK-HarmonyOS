@@ -33,13 +33,22 @@ function managerFixture(modelName = 'x2.0-sla') {
     heartbeats: [] };
   const timers = [];
   let sessionGate = null, autoConfirm = true, holdPreview = false, media, stream, api;
-  let Track, Format, MediaStream, XmaxError, Code, CameraPosition, updatePosition;
+  let Track, Format, MediaStream, XmaxError, Code, CameraPosition, updatePosition, RealtimeCameraZoom;
   class FakeMedia {
     constructor(_context, _rtc, _stream, _error, _service, formatListener, endedListener) {
       media = this; this.currentTrack = null; this.hasAudio = true; this.formatListener = formatListener; this.onError = _error;
       this.endedListener = endedListener;
     }
     get currentVideoFormat() { return this.currentTrack?.videoFormat; }
+    get currentCameraZoom() {
+      const position = this.currentTrack?.position;
+      return position === undefined ? undefined :
+        new RealtimeCameraZoom(position === 'front' ? 0.6 : 1, 4, this.zoomRatio ?? 1);
+    }
+    setCameraZoomRatio(ratio) {
+      this.zoomRatio = ratio;
+      (calls.cameraZoom ??= []).push(ratio);
+    }
     async updateCameraFormat(format) {
       (calls.cameraFormats ??= []).push(format);
       if (this.formatGate) await this.formatGate.promise;
@@ -82,6 +91,7 @@ function managerFixture(modelName = 'x2.0-sla') {
     setCameraPreviewReadyHandler(listener) { this.readyHandler = listener; if (!holdPreview) listener?.(); }
     async switchCamera() {
       calls.switches++;
+      this.zoomRatio = 1;
       updatePosition(this.currentTrack, CameraPosition.BACK);
       return new MediaStream('local', this.currentTrack);
     }
@@ -159,6 +169,7 @@ function managerFixture(modelName = 'x2.0-sla') {
   }, { setTimeout: callback => { timers.push(callback); return timers.length; } });
   ({ RealtimeVideoTrack: Track, updateRealtimeVideoTrackPosition: updatePosition } = load('service/realtime/RealtimeVideoTrack.ets'));
   ({ RealtimeVideoFormat: Format } = load('service/realtime/RealtimeVideoFormat.ets'));
+  ({ RealtimeCameraZoom } = load('service/realtime/RealtimeCameraZoom.ets'));
   ({ RealtimeMediaStream: MediaStream } = load('service/realtime/RealtimeMediaStream.ets'));
   ({ XmaxError, XmaxErrorCode: Code } = load('foundation/errors/XmaxError.ets'));
   ({ CameraPosition } = load('foundation/media/camera/CameraPosition.ets'));
@@ -168,6 +179,7 @@ function managerFixture(modelName = 'x2.0-sla') {
   const { RealtimeModels } = load('service/realtime/RealtimeModel.ets');
   const manager = new XmaxRealtimeManager({}, { model: RealtimeModels.realtime(modelName) }, {});
   return { load, manager, media, stream, api, calls, timers, State, Reason, ReasonKind, Context, Format, Track, MediaStream, XmaxError, Code,
+    RealtimeCameraZoom,
     rotateCamera(format) {
       const track = media.currentTrack;
       const previous = track.videoFormat;
@@ -183,6 +195,39 @@ function managerFixture(modelName = 'x2.0-sla') {
     runSwitchDelay() { assert.equal(timers.length, 1); timers.shift()(); }
   };
 }
+
+test('zoom is admitted only on a stable camera and does not restart generation', async () => {
+  const f = managerFixture();
+  assert.throws(() => f.manager.setCameraZoomRatio(1), { code: f.Code.INVALID_CONFIGURATION });
+  f.holdPreview();
+  const local = await f.create();
+  assert.throws(() => f.manager.setCameraZoomRatio(0.6), { code: f.Code.INVALID_CONFIGURATION });
+  f.media.readyHandler();
+  f.manager.setCameraZoomRatio(0.6);
+  assert.equal(f.manager.currentCameraZoom.ratio, 0.6);
+
+  const gate = f.holdSession(), connecting = f.manager.connect(local);
+  assert.throws(() => f.manager.setCameraZoomRatio(1), { code: f.Code.INVALID_CONFIGURATION });
+  gate.resolve();
+  await connecting;
+  f.manager.setCameraZoomRatio(1);
+
+  f.holdGeneration();
+  const starting = f.manager.startGeneration(new f.Context('test'));
+  await settle();
+  assert.throws(() => f.manager.setCameraZoomRatio(2), { code: f.Code.INVALID_CONFIGURATION });
+  f.calls.starts.at(-1).gate.resolve();
+  await starting;
+  const generating = f.manager.currentState;
+  f.manager.setCameraZoomRatio(2);
+  assert.equal(f.manager.currentState, generating);
+  assert.equal(f.media.currentTrack, local.videoTrack);
+  assert.deepEqual(f.calls.cameraZoom, [0.6, 1, 2]);
+  assert.equal(f.calls.starts.length, 1);
+  assert.equal(f.calls.closed.length, 0);
+  await f.manager.close();
+  assert.equal(f.manager.currentCameraZoom, undefined);
+});
 
 test('camera formats change only from a ready, disconnected camera and preserve its track', async () => {
   const f = managerFixture(), format = new f.Format(1408, 1408, 24, 100, 6000, 'MaintainQuality');
@@ -1220,6 +1265,7 @@ function exampleFixture(modelName = 'x2.0-sla') {
     '@kit.PerformanceAnalysisKit': { hilog: { error() {} } },
     '@xmax/sdk': {
       CameraPosition: { FRONT: 'front' }, RealtimeConnectionState: f.State,
+      RealtimeCameraZoom: f.RealtimeCameraZoom,
       LocalVideoPlaybackState: f.load('service/realtime/LocalVideoPlaybackState.ets').LocalVideoPlaybackState,
       RealtimeReasonKind: f.ReasonKind,
       RealtimeContext: f.Context, RealtimeMediaStream: f.MediaStream, RealtimeVideoFormat: f.Format,
@@ -1252,6 +1298,23 @@ function exampleFixture(modelName = 'x2.0-sla') {
     useManager(manager) { nextManager = manager; }
   };
 }
+
+test('XLab reads the camera zoom, submits its widest ratio, and refreshes the range on switching', async () => {
+  const f = exampleFixture(), vm = f.viewModel;
+  await vm.connect({});
+  assert.equal(vm.state.canAdjustCameraZoom, true);
+  assert.equal(vm.state.cameraZoom.minRatio, 0.6);
+  vm.setCameraZoomRatio(vm.state.cameraZoom.minRatio);
+  assert.deepEqual(f.calls.cameraZoom, [0.6]);
+  assert.equal(vm.state.cameraZoom.ratio, 0.6);
+
+  await vm.switchCamera();
+  assert.equal(vm.state.cameraZoom.minRatio, 1);
+  assert.equal(vm.state.cameraZoom.ratio, 1);
+  await vm.disconnect();
+  assert.equal(vm.state.cameraZoom, undefined);
+  assert.equal(vm.state.canAdjustCameraZoom, false);
+});
 
 test('XLab exposes five camera formats and preserves fps and encoding settings when selecting a ratio', async () => {
   const f = exampleFixture(), vm = f.viewModel;

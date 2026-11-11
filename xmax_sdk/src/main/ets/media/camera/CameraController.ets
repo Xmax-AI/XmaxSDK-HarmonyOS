@@ -34,6 +34,7 @@ import { MediaService } from '../../service/media/MediaService';
 import { MediaServicing } from '../../service/media/MediaServicing';
 import { CameraPreviewReadyHandler } from './CameraPreviewReadyHandler';
 import { RealtimeMediaStream } from '../../service/realtime/RealtimeMediaStream';
+import { RealtimeCameraZoom } from '../../service/realtime/RealtimeCameraZoom';
 import { RealtimeVideoFormat } from '../../service/realtime/RealtimeVideoFormat';
 import {
   RealtimeVideoTrack,
@@ -91,7 +92,7 @@ export class CameraController {
   private frameOutput: CameraFrameOutput | null = null;
 
   /** The configured CameraKit capture session. */
-  private captureSession: camera.Session | null = null;
+  private captureSession: camera.VideoSession | null = null;
 
   // Output track and capture enablement
 
@@ -228,6 +229,51 @@ export class CameraController {
         track,
         output.currentVideoFormat ?? format
       );
+    }
+  }
+
+  /** Reads the zoom capability and applied multiplier of the current capture session. */
+  get currentZoom(): RealtimeCameraZoom | undefined {
+    const session: camera.VideoSession | null = this.captureSession;
+    if (session === null || this.activeTrack === null || !this.acceptsFrames) {
+      return undefined;
+    }
+
+    try {
+      const range: number[] = session.getZoomRatioRange();
+      const min: number = range[0];
+      const max: number = range[1];
+      if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max <= min) {
+        return undefined;
+      }
+
+      const ratio: number = session.getZoomRatio();
+      return Number.isFinite(ratio) && ratio >= min && ratio <= max ?
+        new RealtimeCameraZoom(min, max, ratio) : undefined;
+    } catch (_error) {
+      // A zoom capability query must not interrupt camera preview on unsupported devices.
+      return undefined;
+    }
+  }
+
+  /** Submits a zoom multiplier to CameraKit without reconfiguring capture. */
+  setZoomRatio(
+    ratio: number
+  ): void {
+    const session: camera.VideoSession | null = this.captureSession;
+    const zoom: RealtimeCameraZoom | undefined = this.currentZoom;
+    if (session === null || zoom === undefined || !Number.isFinite(ratio) ||
+      ratio < zoom.minRatio || ratio > zoom.maxRatio) {
+      throw new XmaxError(
+        XmaxErrorCode.INVALID_CONFIGURATION,
+        'Camera zoom ratio is unavailable or outside the supported range'
+      );
+    }
+
+    try {
+      session.setZoomRatio(ratio);
+    } catch (error) {
+      throw this.cameraError(`Failed to set camera zoom: ${XmaxError.from(error).message}`);
     }
   }
 
@@ -622,7 +668,7 @@ export class CameraController {
     );
     this.frameOutput = output;
 
-    const session: camera.Session = this.platformManager.createSession<camera.Session>(
+    const session: camera.VideoSession = this.platformManager.createSession<camera.VideoSession>(
       camera.SceneMode.NORMAL_VIDEO
     );
     this.captureSession = session;

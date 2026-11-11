@@ -5,9 +5,9 @@ const path = require('node:path');
 const { loadEts } = require('./ets-loader.cjs');
 const { createCameraKitFixture } = require('./camera-kit-fixture.cjs');
 
-function fixture() {
+function fixture(cameraOptions = {}) {
   const calls = [], frames = [], errors = [], notifications = [];
-  const kit = createCameraKitFixture(calls);
+  const kit = createCameraKitFixture(calls, cameraOptions);
   const load = loadEts({
     '@kit.ArkUI': { UIUtils: { getTarget: value => value } },
     '@kit.CameraKit': kit.kit, CameraFrameOutput: kit.frameOutput,
@@ -126,6 +126,59 @@ test('camera format updates preserve bitrate-only changes and the chosen ratio a
     assert.equal(switched.videoTrack, local.videoTrack);
     assert.equal(switched.videoTrack.position, 'back');
     assert.deepEqual(switched.videoTrack.videoFormat, encoding);
+  } finally { await f.media.stopLocalCameraStream(); }
+});
+
+test('CameraKit zoom updates in place and switching cameras exposes the new session range', async () => {
+  const f = fixture({ zoomRanges: { front: [0.6, 3], back: [1, 8] } });
+  assert.equal(f.media.currentCameraZoom, undefined);
+  assert.throws(() => f.media.setCameraZoomRatio(1), { code: 'INVALID_CONFIGURATION' });
+  const local = await f.create(), track = local.videoTrack, format = track.videoFormat;
+  try {
+    assert.deepEqual({ ...f.media.currentCameraZoom }, { minRatio: 0.6, maxRatio: 3, ratio: 1 });
+    const before = f.calls.length;
+    f.media.setCameraZoomRatio(0.6);
+    assert.deepEqual(f.calls.slice(before), [['camera-zoom', 'front', 0.6]]);
+    assert.equal(f.media.currentCameraZoom.ratio, 0.6);
+    assert.equal(f.media.currentTrack, track);
+    assert.equal(track.videoFormat, format);
+    assert.equal(f.media.hasAudio, true);
+
+    await f.media.switchCamera();
+    assert.equal(f.media.currentTrack, track);
+    assert.deepEqual({ ...f.media.currentCameraZoom }, { minRatio: 1, maxRatio: 8, ratio: 1 });
+    assert.throws(() => f.media.setCameraZoomRatio(0.6), { code: 'INVALID_CONFIGURATION' });
+    f.media.setCameraZoomRatio(8);
+    assert.deepEqual(f.calls.at(-1), ['camera-zoom', 'back', 8]);
+  } finally { await f.media.stopLocalCameraStream(); }
+  assert.equal(f.media.currentCameraZoom, undefined);
+});
+
+test('unsupported or unreadable zoom ranges do not prevent camera preview', async () => {
+  for (const options of [
+    { zoomRanges: { front: [] } }, { zoomRanges: { front: [1, 1] } },
+    { zoomRanges: { front: [0, 4] } }, { zoomQueryError: new Error('unavailable') }
+  ]) {
+    const f = fixture(options), local = await f.create();
+    try {
+      assert.ok(local.videoTrack);
+      assert.equal(f.media.currentCameraZoom, undefined);
+      assert.throws(() => f.media.setCameraZoomRatio(1), { code: 'INVALID_CONFIGURATION' });
+    } finally { await f.media.stopLocalCameraStream(); }
+  }
+});
+
+test('invalid ratios never reach CameraKit and a rejected zoom leaves the stream active', async () => {
+  const f = fixture({ zoomRanges: { front: [0.6, 3] }, zoomError: new Error('zoom rejected') });
+  const local = await f.create(), before = f.calls.length;
+  try {
+    for (const ratio of [NaN, Infinity, -1, 0.5, 3.01]) {
+      assert.throws(() => f.media.setCameraZoomRatio(ratio), { code: 'INVALID_CONFIGURATION' });
+    }
+    assert.throws(() => f.media.setCameraZoomRatio(1.5), { code: 'MEDIA_ERROR' });
+    assert.equal(f.calls.length, before);
+    assert.equal(f.media.currentTrack, local.videoTrack);
+    assert.equal(f.media.currentCameraZoom.ratio, 1);
   } finally { await f.media.stopLocalCameraStream(); }
 });
 

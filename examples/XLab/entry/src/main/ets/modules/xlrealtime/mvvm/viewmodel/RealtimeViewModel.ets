@@ -8,6 +8,7 @@ import {
   RealtimeNetworkQuality,
   RealtimeQualityLevel,
   LocalVideoPlaybackState,
+  RealtimeCameraZoom,
   RealtimeConfiguration,
   RealtimeConnectionState,
   RealtimeReasonKind,
@@ -400,7 +401,11 @@ export class RealtimeViewModel {
         if (state.connectionState === RealtimeConnectionState.IDLE) {
           this.state.localVideoPlaybackState = undefined;
           this.state.localVideoTrack = null;
+          this.state.cameraZoom = undefined;
           this.localStream = null;
+        }
+        if (state.connectionState === RealtimeConnectionState.READY && this.state.cameraZoom === undefined) {
+          this.state.cameraZoom = manager.currentCameraZoom;
         }
         if (state.connectionState !== RealtimeConnectionState.GENERATING) {
           this.state.remoteVideoTrack = null;
@@ -452,6 +457,7 @@ export class RealtimeViewModel {
       this.localStream = localStream;
       this.state.localVideoTrack = localStream.videoTrack ?? null;
       this.state.cameraVideoFormat = manager.currentCameraVideoFormat;
+      this.state.cameraZoom = manager.currentCameraZoom;
       if (localVideoPath.length > 0 || localImagePath.length > 0) {
         this.state.isLocalPreviewLoading = false;
       }
@@ -521,6 +527,23 @@ export class RealtimeViewModel {
     }
   }
 
+  setCameraZoomRatio(ratio: number): void {
+    const manager: XmaxRealtimeManaging | null = this.realtimeManager;
+    const zoom: RealtimeCameraZoom | undefined = this.state.cameraZoom;
+    if (manager === null || zoom === undefined || !this.state.canAdjustCameraZoom ||
+      this.connecting || this.switchingCamera || this.changingLocalMedia || this.generationUpdating) {
+      return;
+    }
+
+    try {
+      manager.setCameraZoomRatio(ratio);
+      // CameraKit may not report the new ratio until a subsequent frame.
+      this.state.cameraZoom = new RealtimeCameraZoom(zoom.minRatio, zoom.maxRatio, ratio);
+    } catch (error) {
+      this.onMessage?.(this.errorMessage(error));
+    }
+  }
+
   async switchCamera(): Promise<void> {
     const manager: XmaxRealtimeManaging | null = this.realtimeManager;
     if (manager === null || this.connecting || this.switchingCamera ||
@@ -550,6 +573,7 @@ export class RealtimeViewModel {
       }
     } finally {
       if (this.realtimeManager === manager) {
+        this.state.cameraZoom = manager.currentCameraZoom;
         this.switchingCamera = false;
         this.state.isGenerationStarting = this.pendingGenerationRestart;
       }
@@ -632,6 +656,7 @@ export class RealtimeViewModel {
     this.state.selectedReferenceId = '';
     this.state.localVideoTrack = null;
     this.state.cameraVideoFormat = undefined;
+    this.state.cameraZoom = undefined;
     this.state.remoteVideoTrack = null;
     this.state.isLocalPreviewLoading = true;
     this.connecting = false;

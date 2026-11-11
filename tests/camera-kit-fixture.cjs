@@ -16,17 +16,18 @@ function createCameraKitFixture(calls = [], options = {}) {
     createCameraInput(device) {
       calls.push(['camera-input', device.id]);
       return {
+        deviceId: device.id,
         async open() { calls.push(['camera-open', device.id]); },
         async close() { calls.push(['camera-close', device.id]); }
       };
     },
     createSession(mode) {
       calls.push(['camera-session', mode]);
-      let attachedOutput;
+      let attachedOutput, deviceId, zoomRatio = 1;
       return {
         beginConfig() { calls.push(['camera-begin-config']); },
         canAddInput() { return true; },
-        addInput() { calls.push(['camera-add-input']); },
+        addInput(input) { deviceId = input.deviceId; calls.push(['camera-add-input']); },
         canAddOutput() { return true; },
         addOutput(output) { attachedOutput = output; calls.push(['camera-add-output']); },
         async commitConfig() {
@@ -35,6 +36,16 @@ function createCameraKitFixture(calls = [], options = {}) {
           attachedOutput.committed = true;
         },
         async start() { calls.push(['camera-start']); },
+        getZoomRatioRange() {
+          if (options.zoomQueryError) throw options.zoomQueryError;
+          return options.zoomRanges?.[deviceId] ?? [];
+        },
+        getZoomRatio() { return zoomRatio; },
+        setZoomRatio(ratio) {
+          if (options.zoomError) throw options.zoomError;
+          zoomRatio = ratio;
+          calls.push(['camera-zoom', deviceId, ratio]);
+        },
         async stop() { calls.push(['camera-stop']); },
         async release() {
           if (attachedOutput) attachedOutput.committed = false;

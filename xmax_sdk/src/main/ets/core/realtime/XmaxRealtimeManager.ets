@@ -48,6 +48,7 @@ import {
   RealtimeStateListener
 } from '../../service/realtime/RealtimeState';
 import { RealtimeVideoFormat } from '../../service/realtime/RealtimeVideoFormat';
+import { RealtimeCameraZoom } from '../../service/realtime/RealtimeCameraZoom';
 import { RealtimeQualityLevel } from '../../stream/quality/RealtimeQualityLevel';
 import { StreamController } from '../../stream/StreamController';
 import { StreamControlling } from '../../stream/StreamControlling';
@@ -504,6 +505,32 @@ export class XmaxRealtimeManager implements XmaxRealtimeManaging {
   get currentCameraVideoFormat(): RealtimeVideoFormat | undefined {
     const track: RealtimeVideoTrack | null = this.mediaController.currentTrack;
     return track?.position !== undefined ? track.videoFormat : undefined;
+  }
+
+  /** Returns zoom information for the current camera source. */
+  get currentCameraZoom(): RealtimeCameraZoom | undefined {
+    return this.mediaController.currentCameraZoom;
+  }
+
+  /** Changes camera zoom in place without interrupting capture or generation. */
+  setCameraZoomRatio(
+    ratio: number
+  ): void {
+    const state: RealtimeConnectionState = this.currentState.connectionState;
+    if (this.lifecycleManager.isClosing || this.lifecycleManager.hasActiveOperation() ||
+      (state !== RealtimeConnectionState.READY && state !== RealtimeConnectionState.CONNECTED &&
+        state !== RealtimeConnectionState.GENERATING)) {
+      throw this.reportError(new XmaxError(
+        XmaxErrorCode.INVALID_CONFIGURATION,
+        'Camera zoom is unavailable while realtime is transitioning'
+      ));
+    }
+
+    try {
+      this.mediaController.setCameraZoomRatio(ratio);
+    } catch (error) {
+      throw this.reportError(XmaxError.from(error));
+    }
   }
 
   /** Updates a ready, disconnected camera stream while retaining its track and view bindings. */

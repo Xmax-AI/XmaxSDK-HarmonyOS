@@ -1,4 +1,4 @@
-import { DownlinkVideoStatistics, UplinkVideoStatistics, RealtimeNetworkQuality, RealtimeQualityLevel, LocalVideoPlaybackState, RealtimeConnectionState, RealtimeVideoFormat, RealtimeVideoTrack, VideoContentMode } from '@xmax/sdk';
+import { DownlinkVideoStatistics, UplinkVideoStatistics, RealtimeNetworkQuality, RealtimeQualityLevel, LocalVideoPlaybackState, RealtimeCameraZoom, RealtimeConnectionState, RealtimeVideoFormat, RealtimeVideoTrack, VideoContentMode } from '@xmax/sdk';
 import { Reference } from '../../reference/Reference';
 import { ReferenceCategory } from '../../reference/ReferenceCategory';
 import { RealtimeRecordingState } from '../../recording/RealtimeRecordingState';
@@ -55,6 +55,7 @@ export class RealtimeViewState {
   connectionState: RealtimeConnectionState = RealtimeConnectionState.IDLE;
   localVideoTrack: RealtimeVideoTrack | null = null;
   cameraVideoFormat: RealtimeVideoFormat | undefined = undefined;
+  cameraZoom: RealtimeCameraZoom | undefined = undefined;
   remoteVideoTrack: RealtimeVideoTrack | null = null;
   localVideoPlaybackState: LocalVideoPlaybackState | undefined = undefined;
   uplinkStatistics: UplinkVideoStatistics | undefined = undefined;
@@ -103,6 +104,14 @@ export class RealtimeViewState {
     return this.connectionState === RealtimeConnectionState.READY &&
       this.localVideoTrack?.position !== undefined && !this.isLocalPreviewLoading &&
       !this.isGenerationStarting && !this.isCameraFormatUpdating;
+  }
+
+  get canAdjustCameraZoom(): boolean {
+    return this.cameraZoom !== undefined && !this.isLocalPreviewLoading &&
+      !this.isGenerationStarting && !this.isCameraFormatUpdating &&
+      (this.connectionState === RealtimeConnectionState.READY ||
+        this.connectionState === RealtimeConnectionState.CONNECTED ||
+        this.connectionState === RealtimeConnectionState.GENERATING);
   }
 
   get cameraPreviewContentMode(): VideoContentMode {
