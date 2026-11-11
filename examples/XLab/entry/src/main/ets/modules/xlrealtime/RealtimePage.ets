@@ -495,14 +495,6 @@ export struct RealtimePage {
           .onClick((): void => {
             void this.switchCamera();
           })
-          if (this.state.cameraZoom !== undefined) {
-            RealtimeCameraZoomButton({
-              state: this.state,
-              isCameraSwitching: this.isCameraSwitchTransitionActive,
-              onSelect: (ratio: number): void => this.viewModel.setCameraZoomRatio(ratio)
-            })
-              .position({ right: 66, top: 18 })
-          }
           RealtimeAudioControlsView({
             state: this.state,
             isCamera: true,
@@ -599,15 +591,26 @@ export struct RealtimePage {
             onToggle: (): void => { this.toggleStatistics(); }
           })
             .position({ right: 8, top: 192 })
-          if (this.state.supportedCameraFormats.length > 1) {
-            RealtimeCameraFormatButton({
-              state: this.state,
-              isCameraSwitching: this.isCameraSwitchTransitionActive,
-              onSelect: (format: RealtimeVideoFormat): void => {
-                void this.viewModel.updateCameraFormat(format);
+          if (this.state.supportedCameraFormats.length > 1 || this.state.cameraZoom !== undefined) {
+            Column() {
+              if (this.state.supportedCameraFormats.length > 1) {
+                RealtimeCameraFormatButton({
+                  state: this.state,
+                  isCameraSwitching: this.isCameraSwitchTransitionActive,
+                  onSelect: (format: RealtimeVideoFormat): void => {
+                    void this.viewModel.updateCameraFormat(format);
+                  }
+                })
               }
-            })
-              .position({ right: 8, top: 250 })
+              if (this.state.cameraZoom !== undefined) {
+                RealtimeCameraZoomButton({
+                  state: this.state,
+                  isCameraSwitching: this.isCameraSwitchTransitionActive,
+                  onSelect: (ratio: number): void => this.viewModel.setCameraZoomRatio(ratio)
+                })
+              }
+            }
+            .position({ right: 8, top: 250 })
           }
         }
       }

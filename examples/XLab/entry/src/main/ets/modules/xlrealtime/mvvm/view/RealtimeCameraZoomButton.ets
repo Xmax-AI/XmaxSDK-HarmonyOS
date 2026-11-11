@@ -114,7 +114,7 @@ export struct RealtimeCameraZoomButton {
     })
     .bindPopup(this.isMenuVisible, {
       builder: this.zoomMenu,
-      placement: Placement.Bottom,
+      placement: Placement.Left,
       popupColor: $r('app.color.realtime_volume_background'),
       backgroundBlurStyle: BlurStyle.NONE,
       radius: 14,
