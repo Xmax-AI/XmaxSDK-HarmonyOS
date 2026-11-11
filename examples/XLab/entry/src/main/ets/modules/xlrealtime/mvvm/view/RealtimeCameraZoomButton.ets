@@ -63,9 +63,12 @@ export struct RealtimeCameraZoomButton {
 
         Row() {
           Button(`${this.text('camera_zoom_widest')} · ${this.ratioLabel(this.state.cameraZoom.minRatio)}`)
-            .fontSize(11)
-            .height(28)
-            .backgroundColor('#38FFFFFF')
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#FFFFFF')
+            .height(30)
+            .padding({ left: 12, right: 12 })
+            .backgroundColor('#30323D')
             .onClick((): void => {
               if (this.state.cameraZoom !== undefined) {
                 this.applyZoom(this.state.cameraZoom.minRatio);
